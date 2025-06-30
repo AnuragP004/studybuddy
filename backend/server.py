@@ -6,37 +6,32 @@ from datetime import datetime
 from io import BytesIO
 from flask import Flask, request, jsonify, session, redirect, send_file
 from flask_cors import CORS
+from flask_session import Session
 from pdf2image import convert_from_bytes
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from flask_session import Session
 
-
+# ------------------- Setup -------------------
 
 if os.environ.get("FLASK_ENV") != "production":
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-# Load .env vars
 load_dotenv()
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
 
-# ✅ Critical for cross-origin sessions to work
-# Set session type to filesystem
-app.config["SESSION_TYPE"] = "filesystem"
-app.config["SESSION_FILE_DIR"] = "./flask_session"
-app.config["SESSION_PERMANENT"] = False
-Session(app)
-
 app.config.update(
-    SESSION_COOKIE_SAMESITE="None",  # cross-origin cookie support
-    SESSION_COOKIE_SECURE=True,      # only works over HTTPS
-    SESSION_COOKIE_DOMAIN=".onrender.com"  # ✅ important for cross-subdomain persistence!
+    SESSION_TYPE="filesystem",
+    SESSION_FILE_DIR="./flask_session",
+    SESSION_PERMANENT=False,
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True,
+    SESSION_COOKIE_DOMAIN=".onrender.com"
 )
-
+Session(app)
 
 CORS(
     app,
@@ -44,7 +39,6 @@ CORS(
     origins=["https://studybuddy-frontend-lwwq.onrender.com"]
 )
 
-# Environment Config
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CLIENT_SECRETS_FILE = "credentials.json"
@@ -55,6 +49,8 @@ SCOPES = [
     "openid",
     "https://www.googleapis.com/auth/userinfo.email"
 ]
+
+# ------------------- Routes -------------------
 
 @app.route('/')
 def index():
@@ -101,7 +97,6 @@ def oauth_callback():
         "scopes": credentials.scopes
     }
 
-    # ✅ Redirect to deployed frontend
     return redirect("https://studybuddy-frontend-lwwq.onrender.com")
 
 @app.route("/me")
@@ -114,7 +109,6 @@ def get_user():
 def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully."})
-
 
 # ----------------- OCR -------------------
 
@@ -157,8 +151,7 @@ def extract_text():
 
     return jsonify({"text": "\n\n---\n\n".join(extracted_texts)})
 
-
-# ----------------- Summarization -------------------
+# ------------------- Summarize -------------------
 
 @app.route("/summarize", methods=["POST"])
 def summarize():
@@ -182,7 +175,7 @@ def summarize():
     except Exception as e:
         return jsonify({"summary": f"❌ Summarization failed: {str(e)}"}), 500
 
-# ----------------- Download -------------------
+# ------------------- File Download -------------------
 
 @app.route("/download", methods=["POST"])
 def download():
@@ -215,7 +208,7 @@ def download():
 
     return send_file(final_path, as_attachment=True, download_name=f"StudyNotes.{ext}", mimetype="text/plain")
 
-# ----------------- Export to Google Docs -------------------
+# ------------------- Google Docs Export -------------------
 
 @app.route("/export/docs", methods=["POST"])
 def export_to_google_docs():
@@ -223,15 +216,7 @@ def export_to_google_docs():
     if not creds_data:
         return jsonify({"error": "User not authenticated with Google"}), 403
 
-    creds = Credentials(
-        token=creds_data["token"],
-        refresh_token=creds_data["refresh_token"],
-        token_uri=creds_data["token_uri"],
-        client_id=creds_data["client_id"],
-        client_secret=creds_data["client_secret"],
-        scopes=creds_data["scopes"]
-    )
-
+    creds = Credentials(**creds_data)
     service = build("docs", "v1", credentials=creds)
 
     data = request.get_json()
@@ -251,7 +236,7 @@ def export_to_google_docs():
         "doc_url": f"https://docs.google.com/document/d/{doc_id}"
     })
 
-# ----------------- Session History -------------------
+# ------------------- History -------------------
 
 @app.route("/history", methods=["GET"])
 def list_history():
@@ -267,8 +252,7 @@ def list_history():
             if os.path.exists(meta_file):
                 with open(meta_file, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                extracted = ""
-                summary = ""
+                extracted = summary = ""
                 try:
                     with open(os.path.join(folder_path, "extracted.txt"), "r", encoding="utf-8") as f1:
                         extracted = f1.read()
@@ -294,10 +278,7 @@ def get_session_by_id(session_id):
     folder = os.path.join(user_dir, session_id)
     with open(os.path.join(folder, "extracted.txt"), "r", encoding="utf-8") as f1, \
          open(os.path.join(folder, "summary.txt"), "r", encoding="utf-8") as f2:
-        return jsonify({
-            "extracted": f1.read(),
-            "summary": f2.read()
-        })
+        return jsonify({"extracted": f1.read(), "summary": f2.read()})
 
 @app.route("/history/save", methods=["POST"])
 def save_session():
@@ -337,8 +318,9 @@ def delete_session(session_id):
         return jsonify({"message": "Deleted successfully."})
     return jsonify({"error": "Session not found."}), 404
 
-# ----------------- Run App -------------------
+# ------------------- Start Server -------------------
 
 if __name__ == "__main__":
     os.makedirs("sessions", exist_ok=True)
+    os.makedirs("flask_session", exist_ok=True)
     app.run(debug=True)
