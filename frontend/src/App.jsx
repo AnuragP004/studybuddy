@@ -14,30 +14,21 @@ export default function App() {
   const [history, setHistory] = useState([]);
   const [readOnlyExtracted, setReadOnlyExtracted] = useState(true);
   const [readOnlySummary, setReadOnlySummary] = useState(true);
-  const [user, setUser] = useState(null);
 
   useEffect(() => {
-    fetch(`${API_BASE}/me`, { credentials: "include" })
+    fetch(`${API_BASE}/history`)
       .then((res) => res.json())
-      .then((data) => {
-        if (data.email) {
-          setUser(data.email);
-          fetch(`${API_BASE}/history`, { credentials: "include" })
-            .then((res) => res.json())
-            .then((backendHistory) => {
-              setHistory(
-                backendHistory.map((item, index) => ({
-                  id: item.session_id || index,
-                  title: item.title || `Session ${index + 1}`,
-                  extracted: item.extracted || "",
-                  summary: item.summary || "",
-                }))
-              );
-            })
-            .catch(() => console.warn("⚠️ Failed to load history from backend."));
-        }
+      .then((backendHistory) => {
+        setHistory(
+          backendHistory.map((item, index) => ({
+            id: item.session_id || index,
+            title: item.title || `Session ${index + 1}`,
+            extracted: item.extracted || "",
+            summary: item.summary || "",
+          }))
+        );
       })
-      .catch(() => setUser(null));
+      .catch(() => console.warn("⚠️ Failed to load history from backend."));
   }, []);
 
   const saveSession = async (title, summaryOverride = null) => {
@@ -49,17 +40,14 @@ export default function App() {
     const updatedHistory = [{ id: Date.now(), ...newEntry }, ...history];
     setHistory(updatedHistory);
 
-    if (user) {
-      try {
-        await fetch(`${API_BASE}/history/save`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify(newEntry),
-        });
-      } catch (err) {
-        console.error("❌ Failed to save history to backend:", err);
-      }
+    try {
+      await fetch(`${API_BASE}/history/save`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newEntry),
+      });
+    } catch (err) {
+      console.error("❌ Failed to save history to backend:", err);
     }
   };
 
@@ -73,7 +61,6 @@ export default function App() {
       const res = await fetch(`${API_BASE}/extract`, {
         method: "POST",
         body: formData,
-        credentials: "include",
       });
       const data = await res.json();
       if (data.error) throw new Error(data.error);
@@ -117,7 +104,6 @@ export default function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ extracted: extractedText, summary: summaryText, format }),
-        credentials: "include",
       });
       const blob = await res.blob();
       const url = URL.createObjectURL(blob);
@@ -128,31 +114,6 @@ export default function App() {
       URL.revokeObjectURL(url);
     } catch (err) {
       alert("❌ Failed to download file.");
-      console.error(err);
-    }
-  };
-
-  const exportToGoogleDocs = async () => {
-    const title = prompt("📄 Enter Google Doc title:", "StudyBuddy Notes");
-    if (!title) return;
-
-    try {
-      const res = await fetch(`${API_BASE}/export/docs`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ extracted: extractedText, summary: summaryText, title }),
-        credentials: "include",
-      });
-      const data = await res.json();
-      if (data.doc_url) {
-        alert("✅ Exported to Google Docs!");
-        window.open(data.doc_url, "_blank");
-      } else {
-        alert("❌ Failed to export. Try authorizing first.");
-        window.location.href = `${API_BASE}/authorize`;
-      }
-    } catch (err) {
-      alert("❌ Error exporting to Google Docs.");
       console.error(err);
     }
   };
@@ -169,23 +130,6 @@ export default function App() {
       <div className="container" id="mainContent">
         <div className="topbar">
           <h1 className="topbar-logo">📚 <span style={{ color: "#b983ff" }}>Study</span><span style={{ color: "#64ffda" }}>Buddy</span></h1>
-          {user ? (
-            <div className="topbar-user">
-              👤 {user}
-              <button className="logout-btn" onClick={async () => {
-                await fetch(`${API_BASE}/logout`, { method: "POST", credentials: "include" });
-                setUser(null);
-                setHistory([]);
-                localStorage.removeItem("studyHistory");
-              }}>
-                📕 Logout
-              </button>
-            </div>
-          ) : (
-            <button className="login-btn" onClick={() => (window.location.href = `${API_BASE}/authorize`)}>
-              🔐 Login with Google
-            </button>
-          )}
         </div>
 
         <p className="page-description">
@@ -235,8 +179,6 @@ export default function App() {
             Download
           </button>
         </div>
-
-        <button onClick={exportToGoogleDocs}>📝 Export to Google Docs</button>
       </div>
     </div>
   );

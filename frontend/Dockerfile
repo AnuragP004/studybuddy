@@ -1,15 +1,10 @@
-# frontend/Dockerfile
-FROM node:20
+FROM node:20-alpine AS builder
 
 WORKDIR /app
-
-COPY package*.json ./
-RUN npm install
-
 COPY . .
+RUN npm install && npm run build
 
-RUN npm run build
-
-# Use a simple static server
-RUN npm install -g serve
-CMD ["serve", "-s", "dist", "-l", "3000"]
+# Serve the built frontend
+FROM nginx:alpine
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80

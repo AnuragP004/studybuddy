@@ -4,19 +4,13 @@ import base64
 import requests
 from datetime import datetime
 from io import BytesIO
-from flask import Flask, request, jsonify, session, redirect, send_file
+from flask import Flask, request, jsonify, send_file
 from flask_cors import CORS
 from flask_session import Session
 from pdf2image import convert_from_bytes
-from google.oauth2.credentials import Credentials
-from google_auth_oauthlib.flow import Flow
-from googleapiclient.discovery import build
 from dotenv import load_dotenv
 
 # ------------------- Setup -------------------
-
-if os.environ.get("FLASK_ENV") != "production":
-    os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
 load_dotenv()
 
@@ -41,74 +35,12 @@ CORS(
 
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-CLIENT_SECRETS_FILE = "credentials.json"
-REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "https://studybuddy-backend-t05z.onrender.com/callback")
-SCOPES = [
-    "https://www.googleapis.com/auth/documents",
-    "https://www.googleapis.com/auth/drive.file",
-    "openid",
-    "https://www.googleapis.com/auth/userinfo.email"
-]
 
 # ------------------- Routes -------------------
 
 @app.route('/')
 def index():
     return "StudyBuddy Backend is running 🚀"
-
-@app.route("/authorize")
-def authorize():
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
-        scopes=SCOPES,
-        redirect_uri=REDIRECT_URI
-    )
-    auth_url, state = flow.authorization_url(access_type="offline", include_granted_scopes="true")
-    session["state"] = state
-    return redirect(auth_url)
-
-@app.route("/callback")
-def oauth_callback():
-    state = session.get("state")
-    if not state:
-        return "Invalid state", 400
-
-    flow = Flow.from_client_secrets_file(
-        CLIENT_SECRETS_FILE,
-        scopes=SCOPES,
-        state=state,
-        redirect_uri=REDIRECT_URI
-    )
-    flow.fetch_token(authorization_response=request.url)
-    credentials = flow.credentials
-
-    userinfo = requests.get(
-        "https://www.googleapis.com/oauth2/v3/userinfo",
-        headers={"Authorization": f"Bearer {credentials.token}"}
-    ).json()
-
-    session["user_email"] = userinfo.get("email")
-    session["creds"] = {
-        "token": credentials.token,
-        "refresh_token": credentials.refresh_token,
-        "token_uri": credentials.token_uri,
-        "client_id": credentials.client_id,
-        "client_secret": credentials.client_secret,
-        "scopes": credentials.scopes
-    }
-
-    return redirect("https://studybuddy-frontend-lwwq.onrender.com")
-
-@app.route("/me")
-def get_user():
-    if "user_email" in session:
-        return jsonify({"email": session["user_email"]})
-    return jsonify({"email": None}), 401
-
-@app.route("/logout", methods=["POST"])
-def logout():
-    session.clear()
-    return jsonify({"message": "Logged out successfully."})
 
 # ----------------- OCR -------------------
 
@@ -129,9 +61,6 @@ def extract_text_from_base64(base64_img):
 
 @app.route("/extract", methods=["POST"])
 def extract_text():
-    if "user_email" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
     extracted_texts = []
     for file_data in request.files.getlist("files"):
         filename = file_data.filename.lower()
@@ -179,17 +108,12 @@ def summarize():
 
 @app.route("/download", methods=["POST"])
 def download():
-    if "user_email" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
-    os.makedirs(user_dir, exist_ok=True)
-
     data = request.get_json()
     extracted = data.get("extracted", "")
     summary = data.get("summary", "")
     format = data.get("format", "txt")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    user_dir = os.path.join("sessions", "anonymous")
     folder_path = os.path.join(user_dir, f"session_{timestamp}")
     os.makedirs(folder_path, exist_ok=True)
 
@@ -208,42 +132,11 @@ def download():
 
     return send_file(final_path, as_attachment=True, download_name=f"StudyNotes.{ext}", mimetype="text/plain")
 
-# ------------------- Google Docs Export -------------------
-
-@app.route("/export/docs", methods=["POST"])
-def export_to_google_docs():
-    creds_data = session.get("creds")
-    if not creds_data:
-        return jsonify({"error": "User not authenticated with Google"}), 403
-
-    creds = Credentials(**creds_data)
-    service = build("docs", "v1", credentials=creds)
-
-    data = request.get_json()
-    title = data.get("title", "StudyBuddy Notes")
-    content = f"📚 Extracted Notes\n\n{data.get('extracted', '')}\n\n---\n\n📌 Summary\n\n{data.get('summary', '')}"
-
-    doc = service.documents().create(body={"title": title}).execute()
-    doc_id = doc.get("documentId")
-
-    service.documents().batchUpdate(
-        documentId=doc_id,
-        body={"requests": [{"insertText": {"location": {"index": 1}, "text": content}}]}
-    ).execute()
-
-    return jsonify({
-        "message": "✅ Exported to Google Docs!",
-        "doc_url": f"https://docs.google.com/document/d/{doc_id}"
-    })
-
 # ------------------- History -------------------
 
 @app.route("/history", methods=["GET"])
 def list_history():
-    if "user_email" not in session:
-        return jsonify([])
-
-    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    user_dir = os.path.join("sessions", "anonymous")
     history = []
     if os.path.exists(user_dir):
         for session_folder in sorted(os.listdir(user_dir), reverse=True):
@@ -271,10 +164,7 @@ def list_history():
 
 @app.route("/history/<session_id>", methods=["GET"])
 def get_session_by_id(session_id):
-    if "user_email" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    user_dir = os.path.join("sessions", "anonymous")
     folder = os.path.join(user_dir, session_id)
     with open(os.path.join(folder, "extracted.txt"), "r", encoding="utf-8") as f1, \
          open(os.path.join(folder, "summary.txt"), "r", encoding="utf-8") as f2:
@@ -282,16 +172,13 @@ def get_session_by_id(session_id):
 
 @app.route("/history/save", methods=["POST"])
 def save_session():
-    if "user_email" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
     data = request.get_json()
     title = data.get("title", "Untitled Session")
     extracted = data.get("extracted", "")
     summary = data.get("summary", "")
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    user_dir = os.path.join("sessions", "anonymous")
     folder_path = os.path.join(user_dir, f"session_{timestamp}")
     os.makedirs(folder_path, exist_ok=True)
 
@@ -306,10 +193,7 @@ def save_session():
 
 @app.route("/history/delete/<session_id>", methods=["DELETE"])
 def delete_session(session_id):
-    if "user_email" not in session:
-        return jsonify({"error": "Unauthorized"}), 401
-
-    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    user_dir = os.path.join("sessions", "anonymous")
     folder_path = os.path.join(user_dir, session_id)
 
     if os.path.exists(folder_path):
