@@ -38,9 +38,10 @@ SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email"
 ]
 
-@app.route("/")
+@app.route('/')
 def index():
-    return render_template("index.html")
+    return "StudyBuddy Backend is running"
+
 
 @app.route("/authorize")
 def authorize():
