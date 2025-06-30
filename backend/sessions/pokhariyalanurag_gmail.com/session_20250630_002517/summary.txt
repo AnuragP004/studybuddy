@@ -1,0 +1,12 @@
+Here's a summary of the study notes in bullet points:
+
+*   **Main Argument:** Handwritten notes are more effective for memory retention than typed notes.
+*   **Challenge:** Integrating handwritten notes into a computer-based (Emacs org-mode) workflow is difficult.
+*   **Presentation Goal:** Introduce a system to integrate handwritten notes into an Emacs org-mode workflow.
+*   **Outline:**
+    *   Discuss the problem of managing handwritten notes.
+    *   Highlight the advantages of handwritten notes.
+    *   Present an Emacs org-mode workflow solution.
+    *   Address two scenarios:
+        *   Option 1: When hardware for handwriting (e.g., a tablet) is available.
+        *   Option 2: When only a smartphone is available.
