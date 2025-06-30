@@ -22,9 +22,12 @@ app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
 
 # ✅ Critical for cross-origin sessions to work
+
+
 app.config.update(
-    SESSION_COOKIE_SAMESITE="None",
-    SESSION_COOKIE_SECURE=True
+    SESSION_COOKIE_SAMESITE="None",  # cross-origin cookie support
+    SESSION_COOKIE_SECURE=True,      # only works over HTTPS
+    SESSION_COOKIE_DOMAIN=".onrender.com"  # ✅ important for cross-subdomain persistence!
 )
 
 CORS(
@@ -36,7 +39,7 @@ CORS(
 # Environment Config
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-CLIENT_SECRETS_FILE = os.environ.get("GOOGLE_CLIENT_SECRET_FILE", "credentials.json")
+CLIENT_SECRETS_FILE = "credentials.json"
 REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "https://studybuddy-backend-t05z.onrender.com/callback")
 SCOPES = [
     "https://www.googleapis.com/auth/documents",
