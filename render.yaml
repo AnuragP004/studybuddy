@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: studybuddy-backend
+    env: docker
+    repo: https://github.com/YOUR_USERNAME/YOUR_REPO_NAME
+    plan: free
+    region: oregon
+    dockerContext: ./backend
+    dockerfilePath: ./backend/Dockerfile
+    envVars:
+      - key: GOOGLE_APPLICATION_CREDENTIALS
+        value: credentials.json
+    autoDeploy: true
+
+  - type: web
+    name: studybuddy-frontend
+    env: docker
+    repo: https://github.com/AnuragP004/studybuddy
+    plan: free
+    region: oregon
+    dockerContext: ./frontend
+    dockerfilePath: ./frontend/Dockerfile
+    autoDeploy: true
