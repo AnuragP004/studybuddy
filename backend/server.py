@@ -11,6 +11,9 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
+from flask_session import Session
+
+
 
 if os.environ.get("FLASK_ENV") != "production":
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
@@ -22,13 +25,18 @@ app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
 
 # ✅ Critical for cross-origin sessions to work
-
+# Set session type to filesystem
+app.config["SESSION_TYPE"] = "filesystem"
+app.config["SESSION_FILE_DIR"] = "./flask_session"
+app.config["SESSION_PERMANENT"] = False
+Session(app)
 
 app.config.update(
     SESSION_COOKIE_SAMESITE="None",  # cross-origin cookie support
     SESSION_COOKIE_SECURE=True,      # only works over HTTPS
     SESSION_COOKIE_DOMAIN=".onrender.com"  # ✅ important for cross-subdomain persistence!
 )
+
 
 CORS(
     app,
