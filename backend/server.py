@@ -4,27 +4,23 @@ import base64
 import requests
 from datetime import datetime
 from io import BytesIO
-from flask import Flask, request, jsonify, session, redirect, send_file, render_template
+from flask import Flask, request, jsonify, session, redirect, send_file
 from flask_cors import CORS
 from pdf2image import convert_from_bytes
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
-from flask_cors import CORS
-
 
 if os.environ.get("FLASK_ENV") != "production":
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
 
-
-
 # Load .env vars
 load_dotenv()
 
-app = Flask(__name__, static_folder="static", template_folder="templates")
+app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
-CORS(app, supports_credentials=True, origins=["https://studybuddy-frontend-lwwq.onrender.com"])  # then apply CORS
+CORS(app, supports_credentials=True, origins=["https://studybuddy-frontend-lwwq.onrender.com"])
 
 # Environment Config
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
@@ -40,8 +36,7 @@ SCOPES = [
 
 @app.route('/')
 def index():
-    return "StudyBuddy Backend is running"
-
+    return "StudyBuddy Backend is running 🚀"
 
 @app.route("/authorize")
 def authorize():
@@ -68,7 +63,6 @@ def oauth_callback():
 
     print("REFRESH TOKEN:", credentials.refresh_token)
 
-
     userinfo = requests.get(
         "https://www.googleapis.com/oauth2/v3/userinfo",
         headers={"Authorization": f"Bearer {credentials.token}"}
@@ -86,7 +80,6 @@ def oauth_callback():
     }
     return redirect("http://localhost:5173")
 
-
 @app.route("/me")
 def get_user():
     if "user_email" in session:
@@ -97,7 +90,6 @@ def get_user():
 def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully."})
-
 
 # ----------------- OCR -------------------
 
@@ -199,7 +191,6 @@ def download():
             f.write(extracted)
         with open(os.path.join(folder_path, "summary.txt"), "w", encoding="utf-8") as f:
             f.write(summary)
-
         with open(os.path.join(folder_path, "metadata.json"), "w", encoding="utf-8") as f:
             json.dump({"timestamp": timestamp, "format": format}, f)
 
@@ -217,8 +208,6 @@ def download():
 
 # ----------------- Export to Google Docs -------------------
 
-from google.oauth2.credentials import Credentials
-
 @app.route("/export/docs", methods=["POST"])
 def export_to_google_docs():
     try:
@@ -226,7 +215,6 @@ def export_to_google_docs():
         if not creds_data:
             return jsonify({"error": "User not authenticated with Google"}), 403
 
-        # ✅ Rebuild credentials from session
         creds = Credentials(
             token=creds_data["token"],
             refresh_token=creds_data["refresh_token"],
@@ -276,7 +264,6 @@ def list_history():
             if os.path.exists(meta_file):
                 with open(meta_file, "r", encoding="utf-8") as f:
                     meta = json.load(f)
-                # Read actual content for frontend
                 extracted = ""
                 summary = ""
                 try:
@@ -295,7 +282,6 @@ def list_history():
                     "summary": summary
                 })
     return jsonify(history)
-
 
 @app.route("/history/<session_id>", methods=["GET"])
 def get_session_by_id(session_id):
@@ -355,7 +341,6 @@ def delete_session(session_id):
             return jsonify({"error": "Session not found."}), 404
     except Exception as e:
         return jsonify({"error": str(e)}), 500
-
 
 # ----------------- Run App -------------------
 
