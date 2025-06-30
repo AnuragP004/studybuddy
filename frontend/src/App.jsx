@@ -5,7 +5,7 @@ import HistorySidebar from "./components/HistorySidebar";
 import TextAreaSection from "./components/TextAreaSection";
 import "./styles/style.css";
 
-const API_BASE = import.meta.env.VITE_BACKEND_URL;
+const API_BASE = "https://studybuddy-backend-t05z.onrender.com";
 
 export default function App() {
   const [droppedFiles, setDroppedFiles] = useState([]);
