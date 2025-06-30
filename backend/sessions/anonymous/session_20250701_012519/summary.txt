@@ -1,0 +1,18 @@
+Here's a summary of the provided notes in bullet points:
+
+**Urban EDG - What is Programming & C**
+
+*   **Programming:** A way to communicate instructions to computers, similar to human languages.
+*   **C Language:**
+    *   One of the oldest and finest programming languages.
+    *   Developed by Dennis Ritchie at AT&T's Bell Labs in 1972.
+    *   **Uses:**
+        *   Major parts of Windows, Linux, and other operating systems.
+        *   Driver programs for devices (tablets, printers, etc.).
+        *   Embedded systems (microcontrollers, cameras) where speed and memory efficiency are crucial.
+        *   Game development where low latency is important.
+
+**Simply Noted - Robotic Handwriting**
+
+*   Simply Noted offers robotic technology that produces handwriting indistinguishable from human handwriting using real pens.
+*   They encourage users to try their service.

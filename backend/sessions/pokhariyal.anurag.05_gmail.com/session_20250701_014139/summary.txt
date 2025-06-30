@@ -1,0 +1,13 @@
+Here's a summary of the notes in bullet points:
+
+*   **Programming:**
+    *   A medium for communicating instructions to computers.
+    *   Analogous to human languages (Hindi, English) for instructing computers.
+*   **C Programming Language:**
+    *   An old and well-regarded programming language.
+    *   Developed by Dennis Ritchie at AT&T's Bell Labs in 1972.
+*   **Uses of C:**
+    *   Major parts of operating systems (Windows, Linux).
+    *   Device driver programming (tablets, printers).
+    *   Embedded systems programming (microwaves, cameras) due to its speed and efficiency in limited memory.
+    *   Game development due to its low latency (fast reaction to user input).

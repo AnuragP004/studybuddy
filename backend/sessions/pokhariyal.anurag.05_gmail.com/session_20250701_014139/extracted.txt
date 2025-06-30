@@ -1,0 +1,26 @@
+URBAN
+EDG
+What is Programming
+2
+Computer Programming is a medium for us to communicate
+with computers. Just like we use "Hindi" or "English" I
+to Communicate with each other, programming is a
+way for us to deliver our instructions to the Computer..
+What is C ?
+C is a programming language.
+C is one of the oldest and finest programming
+languages
+C was developed by Dennis Ritchie at AT&T's
+Bell Labs, USA in 1972.
+Uses of C
+C Language is used to program a wide variety of
+systems. Some of the uses of C are as follows:
+17 Major parts of Windows, Linux and other operating
+systems are written in C.
+22 C is used to write driver programs for devices like
+Tablets, printers etc.
+3. C language is used to program embedded systems where
+progrants need to run faster in limited memory (Microwave,
+"Cameras etc.)
+42 C is used to develop games, an area where latency is very
+important. ie. Computer has to react quickly on user input.
