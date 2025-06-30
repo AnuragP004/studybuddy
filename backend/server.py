@@ -20,13 +20,24 @@ load_dotenv()
 
 app = Flask(__name__, static_folder="static")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
-CORS(app, supports_credentials=True, origins=["https://studybuddy-frontend-lwwq.onrender.com"])
+
+# ✅ Critical for cross-origin sessions to work
+app.config.update(
+    SESSION_COOKIE_SAMESITE="None",
+    SESSION_COOKIE_SECURE=True
+)
+
+CORS(
+    app,
+    supports_credentials=True,
+    origins=["https://studybuddy-frontend-lwwq.onrender.com"]
+)
 
 # Environment Config
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 CLIENT_SECRETS_FILE = os.environ.get("GOOGLE_CLIENT_SECRET_FILE", "credentials.json")
-REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "http://localhost:5000/callback")
+REDIRECT_URI = os.environ.get("GOOGLE_REDIRECT_URI", "https://studybuddy-backend-t05z.onrender.com/callback")
 SCOPES = [
     "https://www.googleapis.com/auth/documents",
     "https://www.googleapis.com/auth/drive.file",
@@ -51,7 +62,10 @@ def authorize():
 
 @app.route("/callback")
 def oauth_callback():
-    state = session["state"]
+    state = session.get("state")
+    if not state:
+        return "Invalid state", 400
+
     flow = Flow.from_client_secrets_file(
         CLIENT_SECRETS_FILE,
         scopes=SCOPES,
@@ -61,15 +75,12 @@ def oauth_callback():
     flow.fetch_token(authorization_response=request.url)
     credentials = flow.credentials
 
-    print("REFRESH TOKEN:", credentials.refresh_token)
-
     userinfo = requests.get(
         "https://www.googleapis.com/oauth2/v3/userinfo",
         headers={"Authorization": f"Bearer {credentials.token}"}
     ).json()
 
     session["user_email"] = userinfo.get("email")
-
     session["creds"] = {
         "token": credentials.token,
         "refresh_token": credentials.refresh_token,
@@ -78,7 +89,9 @@ def oauth_callback():
         "client_secret": credentials.client_secret,
         "scopes": credentials.scopes
     }
-    return redirect("http://localhost:5173")
+
+    # ✅ Redirect to deployed frontend
+    return redirect("https://studybuddy-frontend-lwwq.onrender.com")
 
 @app.route("/me")
 def get_user():
@@ -91,16 +104,15 @@ def logout():
     session.clear()
     return jsonify({"message": "Logged out successfully."})
 
+
 # ----------------- OCR -------------------
 
 def extract_text_from_base64(base64_img):
     payload = {
-        "requests": [
-            {
-                "image": {"content": base64_img},
-                "features": [{"type": "DOCUMENT_TEXT_DETECTION"}]
-            }
-        ]
+        "requests": [{
+            "image": {"content": base64_img},
+            "features": [{"type": "DOCUMENT_TEXT_DETECTION"}]
+        }]
     }
     response = requests.post(
         f"https://vision.googleapis.com/v1/images:annotate?key={GOOGLE_API_KEY}",
@@ -108,38 +120,32 @@ def extract_text_from_base64(base64_img):
         json=payload
     )
     result = response.json()
-    print("🔍 Google Vision API Result:", result)
     return result["responses"][0].get("fullTextAnnotation", {}).get("text", "")
 
 @app.route("/extract", methods=["POST"])
 def extract_text():
-    try:
-        if "user_email" not in session:
-            return jsonify({"error": "Unauthorized"}), 401
+    if "user_email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
-        extracted_texts = []
-        for file_data in request.files.getlist("files"):
-            filename = file_data.filename.lower()
-            if filename.endswith(".pdf"):
-                pdf_images = convert_from_bytes(file_data.read())
-                for img in pdf_images:
-                    buffered = BytesIO()
-                    img.save(buffered, format="JPEG")
-                    base64_img = base64.b64encode(buffered.getvalue()).decode()
-                    text = extract_text_from_base64(base64_img)
-                    extracted_texts.append(text)
-            else:
-                image_bytes = file_data.read()
-                base64_img = base64.b64encode(image_bytes).decode()
+    extracted_texts = []
+    for file_data in request.files.getlist("files"):
+        filename = file_data.filename.lower()
+        if filename.endswith(".pdf"):
+            pdf_images = convert_from_bytes(file_data.read())
+            for img in pdf_images:
+                buffered = BytesIO()
+                img.save(buffered, format="JPEG")
+                base64_img = base64.b64encode(buffered.getvalue()).decode()
                 text = extract_text_from_base64(base64_img)
                 extracted_texts.append(text)
+        else:
+            image_bytes = file_data.read()
+            base64_img = base64.b64encode(image_bytes).decode()
+            text = extract_text_from_base64(base64_img)
+            extracted_texts.append(text)
 
-        final_text = "\n\n---\n\n".join(extracted_texts)
-        return jsonify({"text": final_text})
+    return jsonify({"text": "\n\n---\n\n".join(extracted_texts)})
 
-    except Exception as e:
-        print("❌ OCR Error:", e)
-        return jsonify({"error": str(e)}), 500
 
 # ----------------- Summarization -------------------
 
@@ -153,9 +159,9 @@ def summarize():
 
         endpoint = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={GEMINI_API_KEY}"
         payload = {
-            "contents": [
-                {"parts": [{"text": f"Summarize the following study notes into bullet points:\n\n{input_text}"}]}
-            ]
+            "contents": [{
+                "parts": [{"text": f"Summarize the following study notes into bullet points:\n\n{input_text}"}]
+            }]
         }
         response = requests.post(endpoint, headers={"Content-Type": "application/json"}, json=payload)
         result = response.json()
@@ -163,90 +169,76 @@ def summarize():
         return jsonify({"summary": summary})
 
     except Exception as e:
-        import traceback
-        traceback.print_exc()
         return jsonify({"summary": f"❌ Summarization failed: {str(e)}"}), 500
 
 # ----------------- Download -------------------
 
 @app.route("/download", methods=["POST"])
 def download():
-    try:
-        if "user_email" not in session:
-            return jsonify({"error": "Unauthorized"}), 401
+    if "user_email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
-        user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
-        os.makedirs(user_dir, exist_ok=True)
+    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    os.makedirs(user_dir, exist_ok=True)
 
-        data = request.get_json()
-        extracted = data.get("extracted", "")
-        summary = data.get("summary", "")
-        format = data.get("format", "txt")
+    data = request.get_json()
+    extracted = data.get("extracted", "")
+    summary = data.get("summary", "")
+    format = data.get("format", "txt")
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    folder_path = os.path.join(user_dir, f"session_{timestamp}")
+    os.makedirs(folder_path, exist_ok=True)
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        folder_path = os.path.join(user_dir, f"session_{timestamp}")
-        os.makedirs(folder_path, exist_ok=True)
+    with open(os.path.join(folder_path, "extracted.txt"), "w", encoding="utf-8") as f:
+        f.write(extracted)
+    with open(os.path.join(folder_path, "summary.txt"), "w", encoding="utf-8") as f:
+        f.write(summary)
+    with open(os.path.join(folder_path, "metadata.json"), "w", encoding="utf-8") as f:
+        json.dump({"timestamp": timestamp, "format": format}, f)
 
-        with open(os.path.join(folder_path, "extracted.txt"), "w", encoding="utf-8") as f:
-            f.write(extracted)
-        with open(os.path.join(folder_path, "summary.txt"), "w", encoding="utf-8") as f:
-            f.write(summary)
-        with open(os.path.join(folder_path, "metadata.json"), "w", encoding="utf-8") as f:
-            json.dump({"timestamp": timestamp, "format": format}, f)
+    content = f"📚 Extracted Notes\n\n{extracted}\n\n---\n\n📌 Summary\n\n{summary}"
+    ext = "md" if format == "md" else "txt"
+    final_path = os.path.join(folder_path, f"StudyNotes.{ext}")
+    with open(final_path, "w", encoding="utf-8") as f:
+        f.write(content)
 
-        content = f"📚 Extracted Notes\n\n{extracted}\n\n---\n\n📌 Summary\n\n{summary}"
-        ext = "md" if format == "md" else "txt"
-        final_path = os.path.join(folder_path, f"StudyNotes.{ext}")
-        with open(final_path, "w", encoding="utf-8") as f:
-            f.write(content)
-
-        return send_file(final_path, as_attachment=True, download_name=f"StudyNotes.{ext}", mimetype="text/plain")
-
-    except Exception as e:
-        print("❌ Download Error:", e)
-        return jsonify({"error": str(e)}), 500
+    return send_file(final_path, as_attachment=True, download_name=f"StudyNotes.{ext}", mimetype="text/plain")
 
 # ----------------- Export to Google Docs -------------------
 
 @app.route("/export/docs", methods=["POST"])
 def export_to_google_docs():
-    try:
-        creds_data = session.get("creds")
-        if not creds_data:
-            return jsonify({"error": "User not authenticated with Google"}), 403
+    creds_data = session.get("creds")
+    if not creds_data:
+        return jsonify({"error": "User not authenticated with Google"}), 403
 
-        creds = Credentials(
-            token=creds_data["token"],
-            refresh_token=creds_data["refresh_token"],
-            token_uri=creds_data["token_uri"],
-            client_id=creds_data["client_id"],
-            client_secret=creds_data["client_secret"],
-            scopes=creds_data["scopes"]
-        )
+    creds = Credentials(
+        token=creds_data["token"],
+        refresh_token=creds_data["refresh_token"],
+        token_uri=creds_data["token_uri"],
+        client_id=creds_data["client_id"],
+        client_secret=creds_data["client_secret"],
+        scopes=creds_data["scopes"]
+    )
 
-        service = build("docs", "v1", credentials=creds)
+    service = build("docs", "v1", credentials=creds)
 
-        data = request.get_json()
-        title = data.get("title", "StudyBuddy Notes")
-        content = f"📚 Extracted Notes\n\n{data.get('extracted', '')}\n\n---\n\n📌 Summary\n\n{data.get('summary', '')}"
+    data = request.get_json()
+    title = data.get("title", "StudyBuddy Notes")
+    content = f"📚 Extracted Notes\n\n{data.get('extracted', '')}\n\n---\n\n📌 Summary\n\n{data.get('summary', '')}"
 
-        doc = service.documents().create(body={"title": title}).execute()
-        doc_id = doc.get("documentId")
+    doc = service.documents().create(body={"title": title}).execute()
+    doc_id = doc.get("documentId")
 
-        service.documents().batchUpdate(
-            documentId=doc_id,
-            body={"requests": [{"insertText": {"location": {"index": 1}, "text": content}}]}
-        ).execute()
+    service.documents().batchUpdate(
+        documentId=doc_id,
+        body={"requests": [{"insertText": {"location": {"index": 1}, "text": content}}]}
+    ).execute()
 
-        return jsonify({
-            "message": "✅ Exported to Google Docs!",
-            "doc_url": f"https://docs.google.com/document/d/{doc_id}"
-        })
-
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        return jsonify({"error": str(e)}), 500
+    return jsonify({
+        "message": "✅ Exported to Google Docs!",
+        "doc_url": f"https://docs.google.com/document/d/{doc_id}"
+    })
 
 # ----------------- Session History -------------------
 
@@ -271,9 +263,8 @@ def list_history():
                         extracted = f1.read()
                     with open(os.path.join(folder_path, "summary.txt"), "r", encoding="utf-8") as f2:
                         summary = f2.read()
-                except Exception as e:
-                    print(f"⚠️ Failed to read session files: {e}")
-
+                except Exception:
+                    pass
                 history.append({
                     "session_id": session_folder,
                     "title": meta.get("title", session_folder),
@@ -285,20 +276,17 @@ def list_history():
 
 @app.route("/history/<session_id>", methods=["GET"])
 def get_session_by_id(session_id):
-    try:
-        if "user_email" not in session:
-            return jsonify({"error": "Unauthorized"}), 401
+    if "user_email" not in session:
+        return jsonify({"error": "Unauthorized"}), 401
 
-        user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
-        folder = os.path.join(user_dir, session_id)
-        with open(os.path.join(folder, "extracted.txt"), "r", encoding="utf-8") as f1, \
-             open(os.path.join(folder, "summary.txt"), "r", encoding="utf-8") as f2:
-            return jsonify({
-                "extracted": f1.read(),
-                "summary": f2.read()
-            })
-    except Exception as e:
-        return jsonify({"error": str(e)}), 404
+    user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
+    folder = os.path.join(user_dir, session_id)
+    with open(os.path.join(folder, "extracted.txt"), "r", encoding="utf-8") as f1, \
+         open(os.path.join(folder, "summary.txt"), "r", encoding="utf-8") as f2:
+        return jsonify({
+            "extracted": f1.read(),
+            "summary": f2.read()
+        })
 
 @app.route("/history/save", methods=["POST"])
 def save_session():
@@ -332,15 +320,11 @@ def delete_session(session_id):
     user_dir = os.path.join("sessions", session["user_email"].replace("@", "_"))
     folder_path = os.path.join(user_dir, session_id)
 
-    try:
-        if os.path.exists(folder_path):
-            import shutil
-            shutil.rmtree(folder_path)
-            return jsonify({"message": "Deleted successfully."})
-        else:
-            return jsonify({"error": "Session not found."}), 404
-    except Exception as e:
-        return jsonify({"error": str(e)}), 500
+    if os.path.exists(folder_path):
+        import shutil
+        shutil.rmtree(folder_path)
+        return jsonify({"message": "Deleted successfully."})
+    return jsonify({"error": "Session not found."}), 404
 
 # ----------------- Run App -------------------
 
