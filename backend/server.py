@@ -12,7 +12,7 @@ from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
 from dotenv import load_dotenv
 from flask_cors import CORS
-CORS(app, supports_credentials=True)
+
 
 if os.environ.get("FLASK_ENV") != "production":
     os.environ["OAUTHLIB_INSECURE_TRANSPORT"] = "1"
@@ -24,7 +24,7 @@ load_dotenv()
 
 app = Flask(__name__, static_folder="static", template_folder="templates")
 app.secret_key = os.environ.get("FLASK_SECRET_KEY", "dev")
-CORS(app, supports_credentials=True)
+CORS(app, supports_credentials=True, origins=["https://studybuddy-frontend-lwwq.onrender.com"])  # then apply CORS
 
 # Environment Config
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
